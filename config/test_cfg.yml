@@ -1,0 +1,19 @@
+kafka:
+  brokers:
+    - "localhost:9092"
+    - "localhost:9093"
+  topic: "xml-files"
+  dlq_topic: "xml-files-dlq"
+  max_retries: 3
+  retry_backoff_ms: 1000
+  batch_timeout_ms: 100
+  compression: "gzip"
+
+storage:
+  nfs_path: "/mnt/nfs/xml_files"
+  backup_path: "/mnt/nfs/backup"
+  backup_retention_days: 30
+
+app:
+  poll_interval_sec: 10
+  log_level: "info"
