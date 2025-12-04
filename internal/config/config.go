@@ -41,8 +41,7 @@ type AppConfig struct {
 	LogLevel        string `yaml:"log_level" env-default:"info"`
 }
 
-func MustLoad() *Config {
-	configPath := "./config/test_cfg.yml"
+func MustLoad(configPath string) *Config {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		log.Fatalf("config file does not exits: %s", configPath)
 	}

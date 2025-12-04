@@ -8,7 +8,9 @@ import (
 
 func main() {
 	// init config
-	cfg := config.MustLoad()
+	configPath := "./config/config.yml"
+
+	cfg := config.MustLoad(configPath)
 	fmt.Println(cfg.Kafka.Brokers[0])
 	fmt.Println(cfg.Storage.GetRetentionDuration())
 
