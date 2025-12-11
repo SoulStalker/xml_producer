@@ -1,5 +1,5 @@
 broker:
-  type: "rabbit-mq"
+  type: "rabbitmq"
 rabbit-mq:
   url: "amqp://guest:guest@localhost:5672/"
   exchange_type: "topic"

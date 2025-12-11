@@ -3,44 +3,66 @@
 
 ## Описание
 
-`kafka-xml-producer` — это сервис на Go, который периодически сканирует указанную NFS директорию, находит XML файлы и отправляет содержимое каждого файла в Kafka-топик.  
-После успешной отправки файл переносится в backup директорию, а старые файлы в backup автоматически удаляются по настраиваемому временному порогу.
+Универсальный сервис на Go для обработки XML файлов из NFS хранилища и отправки их в message broker (Kafka или RabbitMQ) с поддержкой retry, idempotency и Dead Letter Queue.
 
-Основные возможности:
-- Отправка XML файлов в Kafka.
-- Повторные попытки отправки (retry) с backoff.
-- Dead Letter Queue (DLQ) топик для «плохих» сообщений.
-- Idempotency на уровне producer’а (ключ сообщения на основе файла).
-- Автоархивация и очистка старых файлов в backup.
+Возможности
+Поддержка двух брокеров: Kafka и RabbitMQ (переключение через конфигурацию)
 
-## Архитектура
+Retry механизм: Настраиваемое количество попыток с экспоненциальным backoff
 
-Сервис состоит из трёх основных частей:
+Idempotency: Гарантия отсутствия дубликатов через уникальные ключи на основе содержимого
 
-- **Config слой**  
-  Читает YAML-конфигурацию и/или переменные окружения, мапит всё в структуру Go.
+Dead Letter Queue (DLQ): Автоматическая отправка проблемных сообщений в отдельную очередь
 
-- **Kafka producer**  
-  Обертка над Kafka-клиентом, которая:
-  - Пишет сообщения в основной топик.
-  - Делает несколько попыток записи с задержкой между ними.
-  - При окончательном фейле отправляет сообщение в DLQ-топик.
-  - Генерирует idempotency key на основе имени и содержимого файла.
+Файловый менеджмент: Автоматическое архивирование и очистка старых файлов
 
-- **File processor**  
-  - Сканирует NFS директорию.
-  - Фильтрует файлы по расширению `.xml`.
-  - Читает файл и отправляет контент через producer.
-  - При успехе переносит файл в backup директорию.
-  - Периодически чистит старые файлы из backup по retention-политике.
+Graceful shutdown: Корректная остановка с завершением текущих операций
+
+Гибкая конфигурация: TOML файл + переменные окружения
+
+Архитектура
+text
+┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│  NFS Storage │─────▶│ File Processor   │─────▶│ Message Broker  │
+│  (XML files) │      │                  │      │ (Kafka/RabbitMQ)│
+└──────────────┘      └──────────────────┘      └─────────────────┘
+                             │                           │
+                             │                           │
+                             ▼                           ▼
+                      ┌─────────────┐            ┌─────────────┐
+                      │   Backup    │            │     DLQ     │
+                      │  Directory  │            │  (failures) │
+                      └─────────────┘            └─────────────┘
+Компоненты
+Config Layer: Загрузка конфигурации из TOML и environment variables
+
+Broker Interface: Общий интерфейс для всех message brokers
+
+Kafka Producer: Реализация для Apache Kafka с compression и partitioning
+
+RabbitMQ Producer: Реализация для RabbitMQ с publisher confirms
+
+File Processor: Сканирование, обработка и архивирование XML файлов
 
 ## Конфигурация
 
-Конфигурация задаётся через файл `config.toml` и может быть переопределена переменными окружения.
+Конфигурация задаётся через файл `config.yaml` и может быть переопределена переменными окружения.
 
 ### Пример `config.yaml`
 
 ```yaml
+broker:
+  type: "rabbitmq"
+rabbit-mq:
+  url: "amqp://guest:guest@localhost:5672/"
+  exchange_type: "topic"
+  routing_key: "xml.file"
+  dlq_routing_key: "xml.file.failed"
+  dlq_exchange: "xml-files-dlq"
+  max_retries: 3
+  retry_backoff_ms: 1000
+  durable: true
+  persistent: true
 kafka:
   brokers:
     - "localhost:9092"
@@ -62,121 +84,278 @@ app:
   log_level: "info"
 ```
 
-### Переменные окружения (опционально)
-
-Каждому полю соответствуют переменные окружения (если хочешь их использовать вместо/поверх YAML):
-
-- `KAFKA_BROKERS` — список брокеров, через запятую.
-- `KAFKA_TOPIC`
-- `KAFKA_DLQ_TOPIC`
-- `KAFKA_MAX_RETRIES`
-- `KAFKA_RETRY_BACKOFF_MS`
-- `KAFKA_BATCH_TIMEOUT_MS`
-- `KAFKA_COMPRESSION`
-- `NFS_PATH`
-- `BACKUP_PATH`
-- `BACKUP_RETENTION_DAYS`
-- `APP_POLL_INTERVAL_SEC`
-- `APP_LOG_LEVEL`
+### 
 
 Если переменная не задана, используются значения из `config.yaml` или дефолты, прописанные в структурах конфигурации.
-
-## Запуск
-
-### Требования
-
-- Go 1.25+
-- Доступный кластер Kafka.
-- Смонтированное NFS хранилище с XML файлами (или любая директория, к которой есть доступ).
-
-### Установка зависимостей
-
-В корне проекта:
-
-```bash
-go mod tidy
-```
-
-### Локальный запуск
-
-```bash
+Запуск
+Локальный запуск
+bash
+# С Kafka
+export BROKER_TYPE=kafka
 go run ./cmd/main.go
-```
 
-При старте сервис:
-- загружает конфигурацию;
-- создаёт (если нужно) директорию backup;
-- один раз очищает старые файлы в backup;
-- запускает периодический цикл:
-  - чтение XML файлов из NFS директории;
-  - отправка в Kafka;
-  - перенос в backup;
-  - очистка устаревших файлов из backup.
+# С RabbitMQ
+export BROKER_TYPE=rabbitmq
+go run ./cmd/main.go
+Сборка бинарника
+bash
+go build -o message-broker-producer ./cmd/main.go
+./message-broker-producer
+Docker
+text
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go mod download
+RUN go build -o producer ./cmd/main.go
 
-Остановка по `Ctrl+C` или сигналу `SIGTERM` происходит аккуратно (graceful shutdown).
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/producer .
+COPY config.toml .
+CMD ["./producer"]
+bash
+docker build -t message-broker-producer .
+docker run -v /mnt/nfs:/mnt/nfs -v $(pwd)/config.toml:/root/config.toml message-broker-producer
+Как это работает
+1. Обработка файлов
+Сервис периодически (каждые N секунд) сканирует NFS директорию:
 
-## Как работает idempotency
+Находит все .xml файлы
 
-Для каждого файла считается хэш (например, MD5) от имени файла и его содержимого.  
-Этот хэш используется в качестве `Key` сообщения в Kafka и также записывается в заголовки как `idempotency-key`.
+Читает содержимое каждого файла
 
-Это позволяет:
-- привязать повторную отправку к тому же ключу;
-- минимизировать риск дублирующих записей на уровне потребителя, если он умеет обрабатывать ключи/idempotency.
+Отправляет в message broker
 
-Важно: гарантии «exactly-once» зависят от настроек Kafka и логики потребителя. Producer в этом проекте лишь создаёт стабильный idempotency key.
+При успехе перемещает файл в backup
 
-## Retry и DLQ
+Логирует все операции
 
-- Producer делает несколько попыток отправки сообщения в основной топик.
-- Между попытками используется backoff, зависящий от номера попытки.
-- Если после всех попыток отправка не удалась:
-  - создаётся сообщение для DLQ-топика;
-  - в заголовках указываются:
-    - оригинальные заголовки;
-    - причина отказа (`dlq-reason`);
-    - время помещения в DLQ (`dlq-timestamp`).
+2. Idempotency механизм
+Для каждого файла генерируется уникальный ключ:
 
-Это позволяет отдельно обрабатывать плохие сообщения/файлы downstream-сервисами.
+text
+idempotency_key = MD5(filename + file_content)
+В Kafka:
 
-## Логика работы с файлами
+Ключ используется как message key
 
-Основной цикл:
+Kafka гарантирует порядок сообщений с одним ключом в партиции
 
-1. Прочитать список файлов в `nfs_path`.
-2. Отфильтровать директории и не-XML файлы.
-3. Для каждого XML:
-   - прочитать содержимое файла;
-   - отправить в Kafka через producer;
-   - при успехе переместить файл в `backup_path`.
-4. После обработки файлов — пройтись по `backup_path` и удалить файлы, у которых возраст превышает `backup_retention_days`.
+Consumer может использовать ключ для дедупликации
 
-Файлы удаляются по `mtime` (времени последней модификации).  
+В RabbitMQ:
 
-## Структура проекта
+Ключ записывается в MessageId поле
 
-```text
-kafka-xml-producer/
-├── cmd/
-│   └── main.go             # Точка входа
-├── internal/
-│   ├── config/
-│   │   └── config.go       # Загрузка и хранение конфигурации
-│   ├── producer/
-│   │   └── kafka_producer.go # Kafka producer, retry, DLQ, idempotency
-│   └── processor/
-│       └── file_processor.go # Работа с NFS файлами и backup
-├── config.yaml            # Конфиг (пример/дефолт)
-└── go.mod
-```
+Добавляется в headers как idempotency-key
 
-## Как адаптировать под свой кейс
+Consumer может проверять дубликаты по этому полю
 
-- Измени `kafka.topic` и `kafka.dlq_topic` под свою схему топиков.
-- Настрой `storage.nfs_path` и `storage.backup_path` под свою файловую структуру.
-- При необходимости:
-  - добавь в заголовки сообщения дополнительные поля (идентификаторы, типы сообщений и т.п.);
-  - измени стратегию idempotency (например, хэш только содержимого или добавление бизнес-ключа);
-  - подключи метрики/обёртку для логирования (logrus, zap и т.д.).
+3. Retry стратегия
+При ошибке отправки:
 
-Если нужно, можно отдельно дописать пример docker-compose для локального поднятия Kafka и NFS-like директории.
+Первая попытка: немедленно
+
+Вторая попытка: через retry_backoff_ms * 1
+
+Третья попытка: через retry_backoff_ms * 2
+
+И так далее до max_retries
+
+Если все попытки исчерпаны → отправка в DLQ.
+
+4. Dead Letter Queue
+Сообщения попадают в DLQ когда:
+
+Исчерпаны все retry попытки
+
+Broker недоступен
+
+Timeout при публикации
+
+DLQ сообщение содержит:
+
+Оригинальные данные
+
+Оригинальные headers
+
+dlq-reason - причина ошибки
+
+dlq-timestamp - время помещения в DLQ
+
+5. Cleanup старых файлов
+Каждый цикл обработки:
+
+Проверяет файлы в backup директории
+
+Сравнивает mtime с текущим временем
+
+Удаляет файлы старше backup_retention_days
+
+Логирует количество удаленных файлов
+
+Сравнение Kafka vs RabbitMQ
+Параметр	Kafka	RabbitMQ
+Тип	Distributed log	Message broker
+Производительность	Очень высокая	Высокая
+Persistence	По умолчанию	Опционально
+Ordering	По партиции	По очереди
+Consumer groups	Да	Да (через exchanges)
+Message TTL	Через retention	Да
+Идеально для	Streaming, logs, events	Task queues, RPC
+Когда использовать Kafka
+Высокая пропускная способность (>100K msg/s)
+
+Нужен replay сообщений
+
+Event streaming и log aggregation
+
+Множество consumers читают одни данные
+
+Когда использовать RabbitMQ
+Сложный routing (topic, headers exchanges)
+
+Priority queues
+
+RPC паттерны
+
+Гарантии доставки важнее throughput
+
+Мониторинг
+Логи
+Сервис логирует:
+
+Успешные отправки сообщений
+
+Ошибки и retry попытки
+
+Отправки в DLQ с причинами
+
+Перемещение файлов в backup
+
+Cleanup операции
+
+Пример логов:
+
+text
+2025/12/11 17:30:15 Message Broker Producer started (broker: kafka)
+2025/12/11 17:30:20 Successfully sent message to Kafka for file: document1.xml
+2025/12/11 17:30:20 Successfully processed and backed up file: document1.xml
+2025/12/11 17:30:25 Kafka retry attempt 2/3 after 1s
+2025/12/11 17:30:30 Failed to send message after retries: connection refused
+2025/12/11 17:30:30 Deleted old backup file: old_document.xml (age: 720h)
+Метрики (опционально можно добавить)
+Рекомендуется добавить:
+
+Prometheus metrics для количества processed/failed файлов
+
+Grafana dashboard для визуализации
+
+Health check endpoint
+
+Расширение функциональности
+Добавление нового брокера
+Создай новую директорию internal/broker/newbroker/
+
+Реализуй интерфейс MessageProducer:
+
+go
+type MessageProducer interface {
+    SendMessage(ctx context.Context, fileName string, data []byte) error
+    Close() error
+}
+Добавь конфигурацию в config.go
+
+Добавь создание producer в main.go
+
+Добавление других типов файлов
+Измени фильтр в file_processor.go:
+
+go
+// Вместо только .xml
+validExtensions := []string{".xml", ".json", ".csv"}
+Добавление трансформации данных
+Добавь middleware между чтением файла и отправкой:
+
+go
+func (fp *FileProcessor) transformData(data []byte) ([]byte, error) {
+    // Валидация XML
+    // Обогащение данными
+    // Конвертация формата
+    return transformedData, nil
+}
+Troubleshooting
+Файлы не обрабатываются
+Проверь права доступа к NFS директории
+
+Убедись что файлы имеют расширение .xml
+
+Проверь логи на ошибки чтения
+
+Сообщения попадают в DLQ
+Проверь доступность broker'а
+
+Увеличь max_retries и retry_backoff_ms
+
+Проверь конфигурацию топиков/exchanges
+
+Высокое потребление памяти
+Уменьши poll_interval_sec
+
+Добавь batch processing для больших файлов
+
+Настрой compression в Kafka
+
+RabbitMQ connection errors
+Проверь правильность URL и credentials
+
+Убедись что exchanges созданы
+
+Проверь network connectivity и firewall
+
+Best Practices
+Production deployment:
+
+Используй persistent volumes для backup
+
+Настрой log rotation
+
+Добавь health checks
+
+Используй connection pooling
+
+Security:
+
+Храни credentials в environment variables
+
+Используй TLS для broker connections
+
+Ограничь права доступа к директориям
+
+Performance:
+
+Настрой batch size для Kafka
+
+Используй compression
+
+Мониторь размер DLQ
+
+Настрой retention policies
+
+Reliability:
+
+Запускай несколько инстансов с shared NFS
+
+Используй supervisor/systemd для автозапуска
+
+Настрой alerting на ошибки
+
+Регулярно проверяй DLQ
+
+Лицензия
+MIT
+
+Контакты
+Для вопросов и предложений создавайте issues в репозитории.
