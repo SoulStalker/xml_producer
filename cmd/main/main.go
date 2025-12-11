@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -14,10 +15,10 @@ import (
 )
 
 func main() {
-	// init config
-	configPath := "./config/config.yml"
+	
+	configPath := flag.String("config", "./config/config.yaml", "config file (example: ./config/config.yaml)")
 
-	cfg := config.MustLoad(configPath)
+	cfg := config.MustLoad(*configPath)
 
 	compression := producer.GetCompression(cfg.Kafka.Compression)
 	producerConfig := producer.ProducerConfig{

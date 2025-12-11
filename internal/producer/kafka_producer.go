@@ -81,10 +81,10 @@ func (p *KafkaProducer) SendMessage(ctx context.Context, fileName string, data [
 		if dlqErr := p.sendToDLQ(ctx, message, err); dlqErr != nil {
 			return fmt.Errorf("failed to send DLQ: %v (Error: %w)", dlqErr, err)
 		}
-		return fmt.Errorf("message sent to DLQ: %w", &err)
+		return fmt.Errorf("message sent to DLQ: %w", err)
 	}
 
-	log.Printf("Successfully sent message for file: %s with key: %s", fileName, &idempotencyKey)
+	log.Printf("Successfully sent message for file: %s with key: %v", fileName, idempotencyKey)
 	return nil
 }
 
