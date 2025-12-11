@@ -14,14 +14,9 @@ import (
 	"github.com/SoulStalker/xml_producer/internal/producer"
 )
 
-func main() {
-	
-	configPath := flag.String("config", "./config/config.yaml", "config file (example: ./config/config.yaml)")
-
-	cfg := config.MustLoad(*configPath)
-
+func createKafkaProducer(cfg *config.Config) producer.MessageProducer {
 	compression := producer.GetCompression(cfg.Kafka.Compression)
-	producerConfig := producer.ProducerConfig{
+	producerConfig := producer.KafkaConfig{
 		Brokers:      cfg.Kafka.Brokers,
 		Topic:        cfg.Kafka.Topic,
 		DLQTopic:     cfg.Kafka.DLQTopic,
@@ -31,14 +26,54 @@ func main() {
 		Compression:  compression,
 	}
 
-	kafkaProducer := producer.NewKafkaProducer(producerConfig)
-	defer kafkaProducer.Close()
+	return producer.NewKafkaProducer(producerConfig)
+}
+
+func createRabbitMQProducer(cfg *config.Config) (producer.MessageProducer, error) {
+	producerCfg := producer.RabbitMQConfig{
+		URL:           cfg.RabbitMQ.URL,
+		Exchange:      cfg.RabbitMQ.Exchange,
+		ExchangeType:  cfg.RabbitMQ.ExchangeType,
+		RoutingKey:    cfg.RabbitMQ.RoutingKey,
+		DLQExchange:   cfg.RabbitMQ.DLQExchange,
+		DLQRoutingKey: cfg.RabbitMQ.DLQRoutingKey,
+		MaxRetries:    cfg.RabbitMQ.MaxRetries,
+		RetryBackoff:  time.Duration(cfg.RabbitMQ.RetryBackoffMs) * time.Millisecond,
+		Durable:       cfg.RabbitMQ.Durable,
+		Persistent:    cfg.RabbitMQ.Persistent,
+	}
+
+	return producer.NewRabbitMQProducer(producerCfg)
+}
+
+func main() {
+
+	configPath := flag.String("config", "./config/config.yaml", "config file (example: ./config/config.yaml)")
+
+	cfg := config.MustLoad(*configPath)
+
+	var p producer.MessageProducer
+	var err error
+	switch cfg.Broker.Type {
+	case "kafka":
+		p = createKafkaProducer(cfg)
+		log.Println("Using Kafka as message broker")
+	case "rabbitmq":
+		p, err = createRabbitMQProducer(cfg)
+		if err != nil {
+			log.Fatalf("Failed to create RabbitMQ producer: %v", err)
+		}
+		log.Println("Using RabbitMQ as message broker")
+	default:
+		log.Fatalf("Unknown broker type: %s", cfg.Broker.Type)
+	}
+	defer p.Close()
 
 	fileProc, err := processor.NewFileProcessor(
 		cfg.Storage.NFSPath,
 		cfg.Storage.BackupPath,
 		cfg.Storage.GetRetentionDuration(),
-		kafkaProducer,
+		p,
 	)
 	if err != nil {
 		log.Fatalf("Failed to create file processor: %v", err)

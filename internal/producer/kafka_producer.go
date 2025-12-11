@@ -14,10 +14,10 @@ import (
 type KafkaProducer struct {
 	writer    *kafka.Writer
 	dlqWriter *kafka.Writer
-	config    ProducerConfig
+	config    KafkaConfig
 }
 
-type ProducerConfig struct {
+type KafkaConfig struct {
 	Brokers      []string
 	Topic        string
 	DLQTopic     string
@@ -30,7 +30,7 @@ type ProducerConfig struct {
 	RequiredAcks kafka.RequiredAcks
 }
 
-func NewKafkaProducer(cfg ProducerConfig) *KafkaProducer {
+func NewKafkaProducer(cfg KafkaConfig) *KafkaProducer {
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(cfg.Brokers...),
 		Topic:        cfg.Topic,

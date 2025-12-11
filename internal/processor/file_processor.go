@@ -8,20 +8,22 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/SoulStalker/xml_producer/internal/producer"
 )
 
 type FileProcessor struct {
 	nfsPath       string
 	backupPath    string
 	retentionTime time.Duration
-	producer      MessageSender
+	producer      producer.MessageProducer
 }
 
-type MessageSender interface {
-	SendMessage(ctx context.Context, fileName string, data []byte) error
-}
+// type MessageSender interface {
+// 	SendMessage(ctx context.Context, fileName string, data []byte) error
+// }
 
-func NewFileProcessor(nfsPath, backupPath string, retentionTime time.Duration, producer MessageSender) (*FileProcessor, error) {
+func NewFileProcessor(nfsPath, backupPath string, retentionTime time.Duration, producer producer.MessageProducer) (*FileProcessor, error) {
 	if err := os.MkdirAll(backupPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create backup directory: %v", err)
 	}

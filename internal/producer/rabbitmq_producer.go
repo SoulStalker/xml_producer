@@ -14,10 +14,10 @@ import (
 type RabbitMQProducer struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
-	config  RabbitConfig
+	config  RabbitMQConfig
 }
 
-type RabbitConfig struct {
+type RabbitMQConfig struct {
 	URL           string
 	Exchange      string
 	ExchangeType  string
@@ -30,7 +30,7 @@ type RabbitConfig struct {
 	Persistent    bool
 }
 
-func NewRabbitMQProducer(cfg RabbitConfig) (*RabbitMQProducer, error) {
+func NewRabbitMQProducer(cfg RabbitMQConfig) (*RabbitMQProducer, error) {
 	conn, err := amqp.Dial(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %v", err)

@@ -9,10 +9,11 @@ import (
 )
 
 type Config struct {
-	Broker  BrokerConfig  `yaml:"broker"`
-	Kafka   KafkaConfig   `yaml:"kafka"`
-	Storage StorageConfig `yaml:"storage"`
-	App     AppConfig     `yaml:"app"`
+	Broker   BrokerConfig   `yaml:"broker"`
+	Kafka    KafkaConfig    `yaml:"kafka"`
+	RabbitMQ RabbitMQConfig `yaml:"rabbit-mq"`
+	Storage  StorageConfig  `yaml:"storage"`
+	App      AppConfig      `yaml:"app"`
 
 	// Redis настройки
 	RedisHost     string `yaml:"redis_host" env:"REDIS_HOST" env-default:"localhost"`
