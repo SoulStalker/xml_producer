@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"github.com/segmentio/kafka-go/compress"
 )
 
 type KafkaProducer struct {
@@ -26,6 +25,9 @@ type ProducerConfig struct {
 	RetryBackoff time.Duration
 	BatchTimeout time.Duration
 	Compression  kafka.Compression
+	BatchSize    int
+	WriteTimeout time.Duration
+	RequiredAcks kafka.RequiredAcks
 }
 
 func NewKafkaProducer(cfg ProducerConfig) *KafkaProducer {
@@ -134,17 +136,17 @@ func (p *KafkaProducer) Close() error {
 	return p.dlqWriter.Close()
 }
 
-func GetCompressionCodec(compression string) kafka.CompressionCodec {
+func GetCompression(compression string) kafka.Compression {
 	switch compression {
 	case "gzip":
-		return &compress.GzipCodec
+		return kafka.Gzip
 	case "snappy":
-		return &compress.SnappyCodec
+		return kafka.Snappy
 	case "lz4":
-		return &compress.Lz4Codec
+		return kafka.Lz4
 	case "zstd":
-		return &compress.ZstdCodec
+		return kafka.Zstd
 	default:
-		return &compress.SnappyCodec
+		return kafka.Snappy
 	}
 }
