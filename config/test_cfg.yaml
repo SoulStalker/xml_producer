@@ -1,3 +1,15 @@
+broker:
+  type: "rabbit-mq"
+rabbit-mq:
+  url: "amqp://guest:guest@localhost:5672/"
+  exchange_type: "topic"
+  routing_key: "xml.file"
+  dlq_routing_key: "xml.file.failed"
+  dlq_exchange: "xml-files-dlq"
+  max_retries: 3
+  retry_backoff_ms: 1000
+  durable: true
+  persistent: true
 kafka:
   brokers:
     - "localhost:9092"

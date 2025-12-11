@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	Broker  BrokerConfig  `yaml:"broker"`
 	Kafka   KafkaConfig   `yaml:"kafka"`
 	Storage StorageConfig `yaml:"storage"`
 	App     AppConfig     `yaml:"app"`
@@ -20,6 +21,10 @@ type Config struct {
 	RedisDB       int    `yaml:"redis_db" env:"REDIS_DB" env-default:"0"`
 }
 
+type BrokerConfig struct {
+	Type string `yaml:"type" env-default:"kafka"`
+}
+
 type KafkaConfig struct {
 	Brokers        []string `yaml:"brokers" env-required:"true"`
 	Topic          string   `yaml:"topic" env-required:"true"`
@@ -28,6 +33,19 @@ type KafkaConfig struct {
 	RetryBackoffMs int      `yaml:"retry_backoff_ms" env-default:"1000"`
 	BatchTimeoutMs int      `yaml:"batch_timeout_ms" env-default:"100"`
 	Compression    string   `yaml:"compression" env-default:"gzip"`
+}
+
+type RabbitMQConfig struct {
+	URL            string `yaml:"url"`
+	Exchange       string `yaml:"exchange"`
+	ExchangeType   string `yaml:"exchange_type" env-default:"topic"`
+	RoutingKey     string `yaml:"routing_key"`
+	DLQExchange    string `yaml:"dlq_exchange"`
+	DLQRoutingKey  string `yaml:"dlq_routing_key"`
+	MaxRetries     int    `yaml:"max_retries" env-default:"5"`
+	RetryBackoffMs int    `yaml:"retry_backoff_ms" env-default:"1000"`
+	Durable        bool   `yaml:"durable" env-default:"true"`
+	Persistent     bool   `yaml:"persistent" env-default:"true"`
 }
 
 type StorageConfig struct {
@@ -49,6 +67,10 @@ func MustLoad(configPath string) *Config {
 	var cfg Config
 	if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
 		log.Fatalf("cannot read config: %s", err)
+	}
+
+	if cfg.Broker.Type != "kafka" && cfg.Broker.Type != "rabbitmq" {
+		log.Fatalf("invalid broker type: %s (must be 'kafka' or 'rabbitmq')", cfg.Broker.Type)
 	}
 
 	return &cfg
