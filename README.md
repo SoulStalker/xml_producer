@@ -21,7 +21,7 @@ Graceful shutdown: Корректная остановка с завершени
 Гибкая конфигурация: TOML файл + переменные окружения
 
 Архитектура
-text
+```text
 ┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
 │  NFS Storage │─────▶│ File Processor   │─────▶│ Message Broker  │
 │  (XML files) │      │                  │      │ (Kafka/RabbitMQ)│
@@ -33,6 +33,8 @@ text
                       │   Backup    │            │     DLQ     │
                       │  Directory  │            │  (failures) │
                       └─────────────┘            └─────────────┘
+```
+
 Компоненты
 Config Layer: Загрузка конфигурации из TOML и environment variables
 
