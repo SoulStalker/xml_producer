@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/ilyakaznacheev/cleanenv v1.5.0
+	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/segmentio/kafka-go v0.4.49
 )
 
