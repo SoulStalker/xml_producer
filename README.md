@@ -6,19 +6,13 @@
 Универсальный сервис на Go для обработки XML файлов из NFS хранилища и отправки их в message broker (Kafka или RabbitMQ) с поддержкой retry, idempotency и Dead Letter Queue.
 
 Возможности
-Поддержка двух брокеров: Kafka и RabbitMQ (переключение через конфигурацию)
-
-Retry механизм: Настраиваемое количество попыток с экспоненциальным backoff
-
-Idempotency: Гарантия отсутствия дубликатов через уникальные ключи на основе содержимого
-
-Dead Letter Queue (DLQ): Автоматическая отправка проблемных сообщений в отдельную очередь
-
-Файловый менеджмент: Автоматическое архивирование и очистка старых файлов
-
-Graceful shutdown: Корректная остановка с завершением текущих операций
-
-Гибкая конфигурация: TOML файл + переменные окружения
+- Поддержка двух брокеров: Kafka и RabbitMQ (переключение через конфигурацию)
+- Retry механизм: Настраиваемое количество попыток с экспоненциальным backoff
+- Idempotency: Гарантия отсутствия дубликатов через уникальные ключи на основе содержимого
+- Dead Letter Queue (DLQ): Автоматическая отправка проблемных сообщений в отдельную очередь
+- Файловый менеджмент: Автоматическое архивирование и очистка старых файлов
+- Graceful shutdown: Корректная остановка с завершением текущих операций
+- Гибкая конфигурация: TOML файл + переменные окружения
 
 Архитектура
 ```text
@@ -36,15 +30,11 @@ Graceful shutdown: Корректная остановка с завершени
 ```
 
 Компоненты
-Config Layer: Загрузка конфигурации из TOML и environment variables
-
-Broker Interface: Общий интерфейс для всех message brokers
-
-Kafka Producer: Реализация для Apache Kafka с compression и partitioning
-
-RabbitMQ Producer: Реализация для RabbitMQ с publisher confirms
-
-File Processor: Сканирование, обработка и архивирование XML файлов
+- Config Layer: Загрузка конфигурации из TOML и environment variables
+- Broker Interface: Общий интерфейс для всех message brokers
+- Kafka Producer: Реализация для Apache Kafka с compression и partitioning
+- RabbitMQ Producer: Реализация для RabbitMQ с publisher confirms
+- File Processor: Сканирование, обработка и архивирование XML файлов
 
 ## Конфигурация
 
@@ -89,9 +79,12 @@ app:
 ### 
 
 Если переменная не задана, используются значения из `config.yaml` или дефолты, прописанные в структурах конфигурации.
-Запуск
-Локальный запуск
-bash
+
+## Запуск
+
+### Локальный запуск
+
+```bash
 # С Kafka
 export BROKER_TYPE=kafka
 go run ./cmd/main.go
@@ -99,12 +92,18 @@ go run ./cmd/main.go
 # С RabbitMQ
 export BROKER_TYPE=rabbitmq
 go run ./cmd/main.go
-Сборка бинарника
-bash
+```
+
+### Сборка бинарника
+
+```bash
 go build -o message-broker-producer ./cmd/main.go
 ./message-broker-producer
-Docker
-text
+```
+
+### Docker
+
+```text
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
 COPY . .
@@ -117,244 +116,161 @@ WORKDIR /root/
 COPY --from=builder /app/producer .
 COPY config.toml .
 CMD ["./producer"]
-bash
+```
+
+```bash
 docker build -t message-broker-producer .
 docker run -v /mnt/nfs:/mnt/nfs -v $(pwd)/config.toml:/root/config.toml message-broker-producer
-Как это работает
+```
+
+### Как это работает
+
 1. Обработка файлов
 Сервис периодически (каждые N секунд) сканирует NFS директорию:
-
-Находит все .xml файлы
-
-Читает содержимое каждого файла
-
-Отправляет в message broker
-
-При успехе перемещает файл в backup
-
-Логирует все операции
+- Находит все .xml файлы
+- Читает содержимое каждого файла
+- Отправляет в message broker
+- При успехе перемещает файл в backup
+- Логирует все операции
 
 2. Idempotency механизм
 Для каждого файла генерируется уникальный ключ:
 
-text
+```text
 idempotency_key = MD5(filename + file_content)
-В Kafka:
+```
+### В Kafka:
 
-Ключ используется как message key
+- Ключ используется как message key
+- Kafka гарантирует порядок сообщений с одним ключом в партиции
+- Consumer может использовать ключ для дедупликации
 
-Kafka гарантирует порядок сообщений с одним ключом в партиции
+### В RabbitMQ:
 
-Consumer может использовать ключ для дедупликации
-
-В RabbitMQ:
-
-Ключ записывается в MessageId поле
-
-Добавляется в headers как idempotency-key
-
-Consumer может проверять дубликаты по этому полю
+- Ключ записывается в MessageId поле
+- Добавляется в headers как idempotency-key
+- Consumer может проверять дубликаты по этому полю
 
 3. Retry стратегия
+
 При ошибке отправки:
 
-Первая попытка: немедленно
-
-Вторая попытка: через retry_backoff_ms * 1
-
-Третья попытка: через retry_backoff_ms * 2
-
-И так далее до max_retries
-
-Если все попытки исчерпаны → отправка в DLQ.
+- Первая попытка: немедленно
+- Вторая попытка: через retry_backoff_ms * 1
+- Третья попытка: через retry_backoff_ms * 2
+- И так далее до max_retries
+- Если все попытки исчерпаны → отправка в DLQ.
 
 4. Dead Letter Queue
+
 Сообщения попадают в DLQ когда:
 
-Исчерпаны все retry попытки
-
-Broker недоступен
-
-Timeout при публикации
+- Исчерпаны все retry попытки
+- Broker недоступен
+- Timeout при публикации
 
 DLQ сообщение содержит:
-
-Оригинальные данные
-
-Оригинальные headers
-
-dlq-reason - причина ошибки
-
-dlq-timestamp - время помещения в DLQ
+- Оригинальные данные
+- Оригинальные headers
+- dlq-reason - причина ошибки
+- dlq-timestamp - время помещения в DLQ
 
 5. Cleanup старых файлов
 Каждый цикл обработки:
 
-Проверяет файлы в backup директории
-
-Сравнивает mtime с текущим временем
-
-Удаляет файлы старше backup_retention_days
-
-Логирует количество удаленных файлов
+- Проверяет файлы в backup директории
+- Сравнивает mtime с текущим временем
+- Удаляет файлы старше backup_retention_days
+- Логирует количество удаленных файлов
 
 Сравнение Kafka vs RabbitMQ
-Параметр	Kafka	RabbitMQ
-Тип	Distributed log	Message broker
-Производительность	Очень высокая	Высокая
-Persistence	По умолчанию	Опционально
-Ordering	По партиции	По очереди
-Consumer groups	Да	Да (через exchanges)
-Message TTL	Через retention	Да
-Идеально для	Streaming, logs, events	Task queues, RPC
-Когда использовать Kafka
-Высокая пропускная способность (>100K msg/s)
 
-Нужен replay сообщений
+| Параметр           | Kafka                   | RabbitMQ             |
+| ------------------ | ----------------------- | -------------------- |
+| Тип                | Distributed log         | Message broker       |
+| Производительность | Очень высокая           | Высокая              |
+| Persistence        | По умолчанию            | Опционально          |
+| Ordering           | По партиции             | По очереди           |
+| Consumer groups    | Да                      | Да (через exchanges) |
+| Message TTL        | Через retention         | Да                   |
+| Идеально для       | Streaming, logs, events | Task queues, RPC     |
 
-Event streaming и log aggregation
+### Когда использовать Kafka
 
-Множество consumers читают одни данные
+- Нужен replay сообщений
+- Event streaming и log aggregation
+- Множество consumers читают одни данные
 
 Когда использовать RabbitMQ
-Сложный routing (topic, headers exchanges)
+- Сложный routing (topic, headers exchanges)
+- Priority queues
+- RPC паттерны
+- Гарантии доставки важнее throughput
 
-Priority queues
-
-RPC паттерны
-
-Гарантии доставки важнее throughput
-
-Мониторинг
-Логи
+### Мониторинг
+### Логи
 Сервис логирует:
 
-Успешные отправки сообщений
-
-Ошибки и retry попытки
-
-Отправки в DLQ с причинами
-
-Перемещение файлов в backup
-
-Cleanup операции
+- Успешные отправки сообщений
+- Ошибки и retry попытки
+- Отправки в DLQ с причинами
+- Перемещение файлов в backup
+- Cleanup операции
 
 Пример логов:
 
-text
+```text
 2025/12/11 17:30:15 Message Broker Producer started (broker: kafka)
 2025/12/11 17:30:20 Successfully sent message to Kafka for file: document1.xml
 2025/12/11 17:30:20 Successfully processed and backed up file: document1.xml
 2025/12/11 17:30:25 Kafka retry attempt 2/3 after 1s
 2025/12/11 17:30:30 Failed to send message after retries: connection refused
 2025/12/11 17:30:30 Deleted old backup file: old_document.xml (age: 720h)
-Метрики (опционально можно добавить)
+```
+
+### Метрики (опционально можно добавить)
+
 Рекомендуется добавить:
 
-Prometheus metrics для количества processed/failed файлов
-
-Grafana dashboard для визуализации
-
-Health check endpoint
+- Prometheus metrics для количества processed/failed файлов
+- Grafana dashboard для визуализации
+- Health check endpoint
 
 Расширение функциональности
 Добавление нового брокера
-Создай новую директорию internal/broker/newbroker/
+1. Создай новую директорию internal/broker/newbroker/
+2. Реализуй интерфейс MessageProducer:
 
-Реализуй интерфейс MessageProducer:
-
-go
+```go
 type MessageProducer interface {
     SendMessage(ctx context.Context, fileName string, data []byte) error
     Close() error
 }
-Добавь конфигурацию в config.go
+```
 
-Добавь создание producer в main.go
+3. Добавь конфигурацию в config.go
+4. Добавь создание producer в main.go
 
 Добавление других типов файлов
 Измени фильтр в file_processor.go:
 
-go
+```go
 // Вместо только .xml
 validExtensions := []string{".xml", ".json", ".csv"}
+```
+
 Добавление трансформации данных
 Добавь middleware между чтением файла и отправкой:
 
-go
+```go
 func (fp *FileProcessor) transformData(data []byte) ([]byte, error) {
     // Валидация XML
     // Обогащение данными
     // Конвертация формата
     return transformedData, nil
 }
-Troubleshooting
-Файлы не обрабатываются
-Проверь права доступа к NFS директории
+```
 
-Убедись что файлы имеют расширение .xml
-
-Проверь логи на ошибки чтения
-
-Сообщения попадают в DLQ
-Проверь доступность broker'а
-
-Увеличь max_retries и retry_backoff_ms
-
-Проверь конфигурацию топиков/exchanges
-
-Высокое потребление памяти
-Уменьши poll_interval_sec
-
-Добавь batch processing для больших файлов
-
-Настрой compression в Kafka
-
-RabbitMQ connection errors
-Проверь правильность URL и credentials
-
-Убедись что exchanges созданы
-
-Проверь network connectivity и firewall
-
-Best Practices
-Production deployment:
-
-Используй persistent volumes для backup
-
-Настрой log rotation
-
-Добавь health checks
-
-Используй connection pooling
-
-Security:
-
-Храни credentials в environment variables
-
-Используй TLS для broker connections
-
-Ограничь права доступа к директориям
-
-Performance:
-
-Настрой batch size для Kafka
-
-Используй compression
-
-Мониторь размер DLQ
-
-Настрой retention policies
-
-Reliability:
-
-Запускай несколько инстансов с shared NFS
-
-Используй supervisor/systemd для автозапуска
-
-Настрой alerting на ошибки
-
-Регулярно проверяй DLQ
 
 Лицензия
 MIT
